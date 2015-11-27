@@ -164,26 +164,35 @@ def do_sniff_once(options):
             # Error on output, e.g. fifo closed on the other end
             break
         elif ser.fileno() in fds:
-            # capture until newline character received, then process input
-            data = ser.read(1)[0]
-            while data[len(data)-1] != "\n":
-                data += ser.read(1)[0]
+            # read from serial port until newline character is received
+            data = ser.read()[0]
+            c = " "
+            while c != "\n":
+                c = ser.read()[0]
+                if c != "\r" and ord(c) >= 20 and ord(c) < 126:
+                    # Only append human readable characters to capture.
+                    # Other chars are transmission errors.
+                    data += c
             
             # a packet line is a hex dump split with vertical lines
             if (data.find("|") == -1):
                 print("Received something, but wasn't a packet.")
             else:
                 # one more packet received
-                print("Packet received:\n"+data)
+                print("Packet received:")
                 count += 1
-                
+
+                # re-assemble hexdump of original on-air packet                
                 parts = data.split("|")
-                print parts
-                parts.remove(2) # "MISS"
-                parts.remove(5) # "OK"
-                whole = "".join(parts)
-                print(whole) 
-                
+                if len(parts) > 5:
+                    del parts[5] # "OK"
+                if len(parts) > 2:
+                    del parts[2] # "MISS"
+                whole = "".join(parts).replace("  "," ")
+                print(whole)
+
+                # write packet to FIFO                
+#                data = hexdump2binary(whole)
 #                try:
 #                    # write packet to FIFO
 #                    out.write_packet(data)
