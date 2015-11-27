@@ -119,6 +119,33 @@ def main():
     except KeyboardInterrupt:
         pass
 
+def nibble2int(n):
+    o = ord(n)
+    # 0-9
+    if o >= 48 and o <= 57:
+        return o-48
+    # a-f
+    if o >= 65 and o <= 70:
+        return o-65
+    # A-F
+    if o >= 97 and o <= 102:
+        return o-97
+    return 0
+
+def hex2char(hx):
+    return chr(nibble2int(hx[0])*16 + nibble2int(hx[1]))
+
+def hexdump2binary(hexstring):
+    binary = ""
+    while len(hexstring) > 1:
+        binary += hex2char(hexstring[0]+hexstring[1])
+        if len(hexstring) > 2:
+            h = hexstring[2:].strip()
+            hexstring = h
+        else:
+            hexstring = ""
+    return binary
+
 def do_sniff_once(options):
     # This might block until the other side of the fifo is opened
     out = setup_output(options)
@@ -192,15 +219,15 @@ def do_sniff_once(options):
                 print(whole)
 
                 # write packet to FIFO                
-#                data = hexdump2binary(whole)
-#                try:
-#                    # write packet to FIFO
-#                    out.write_packet(data)
-#                except OSError as e:
-#                    # SIGPIPE indicates the fifo was closed
-#                    if e.errno == errno.SIGPIPE:
-#                        print("FIFO was closed.")
-#                        break
+                data = hexdump2binary(whole)
+                try:
+                    # write packet to FIFO
+                    out.write_packet(data)
+                except OSError as e:
+                    # SIGPIPE indicates the fifo was closed
+                    if e.errno == errno.SIGPIPE:
+                        print("FIFO was closed.")
+                        break
                 
     ser.close()
     out.close()
