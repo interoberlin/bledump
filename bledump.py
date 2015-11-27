@@ -1,31 +1,18 @@
-#!/usr/bin/env python3
-
-# AVR / Arduino dynamic memory log analyis script.
+#!/usr/bin/python
 #
-# Copyright 2014 Matthijs Kooijman <matthijs@stdin.nl>
+# Bluetooth Low Energy packet sniffing script
 #
-# Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so, subject to
-# the following conditions:
+# Reads incoming packets on a serial port
+# from a nRF51822-based USB dongle and
+# outputs them in PCAP-format to a FIFO,
+# which in turn is read by Wireshark.
 #
-# The above copyright notice and this permission notice shall be
-# included in all copies or substantial portions of the Software.
+# Authors:
+#    Matthijs Kooijman <matthijs@stdin.nl>
+#    Matthias Bock <mail@matthiasbock.net>
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# License: GNU GPLv3
 #
-# This script is intended to read raw packets (currently only 802.15.4
-# packets prefixed by a length byte) from a serial port and output them
-# in pcap format.
 
 import os
 import sys
@@ -111,17 +98,17 @@ def main():
                         help='The baudrate to use for the serial port (defaults to %(default)s)')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='Do not output any informational messages')
+    parser.add_argument('-d', '--send-init-delay', type=int, default=2,
+                        help='Wait for this many seconds between opening the serial port and sending the init string (defaults to %(default)s)')
+    parser.add_argument('-s', '--send-init', type=bytes, default=b'module.enable("sniffer"); sniffer.start(1);\r\n',
+                        help='Send the given string over serial to enable capture mode (defaults to %(default)s)')
+    parser.add_argument('-r', '--read-init', type=bytes,
+                        help='Wait until the given string is read from serial before starting capture (defaults to %(default)s)')
     output = parser.add_mutually_exclusive_group()
     output.add_argument('-F', '--fifo',
                         help='Write output to a fifo instead of stdout. The fifo is created if needed and capturing does not start until the other side of the fifo is opened.')
     output.add_argument('-w', '--write-file',
                         help='Write output to a file instead of stdout')
-    output.add_argument('-d', '--send-init-delay', type=int, default=2,
-                        help='Wait for this many seconds between opening the serial port and sending the init string (defaults to %(default)s)')
-    output.add_argument('-s', '--send-init', type=bytes, default=b'module.enable("sniffer"); sniffer.start(1);\r\n',
-                        help='Send the given string over serial to enable capture mode (defaults to %(default)s)')
-    output.add_argument('-r', '--read-init', type=bytes, default=b'SNIF',
-                        help='Wait until the given string is read from serial before starting capture (defaults to %(default)s)')
 
     options = parser.parse_args();
 
@@ -177,17 +164,35 @@ def do_sniff_once(options):
             # Error on output, e.g. fifo closed on the other end
             break
         elif ser.fileno() in fds:
-            # First byte is length of packet, followed by raw data bytes
-            length = ser.read()[0]
-            data = ser.read(length)
-            count += 1
-            try:
-                out.write_packet(data)
-            except OSError as e:
-                # SIGPIPE indicates the fifo was closed
-                if e.errno == errno.SIGPIPE:
-                    break
-
+            # capture until newline character received, then process input
+            data = ser.read(1)[0]
+            while data[len(data)-1] != "\n":
+                data += ser.read(1)[0]
+            
+            # a packet line is a hex dump split with vertical lines
+            if (data.find("|") == -1):
+                print("Received something, but wasn't a packet.")
+            else:
+                # one more packet received
+                print("Packet received:\n"+data)
+                count += 1
+                
+                parts = data.split("|")
+                print parts
+                parts.remove(2) # "MISS"
+                parts.remove(5) # "OK"
+                whole = "".join(parts)
+                print(whole) 
+                
+#                try:
+#                    # write packet to FIFO
+#                    out.write_packet(data)
+#                except OSError as e:
+#                    # SIGPIPE indicates the fifo was closed
+#                    if e.errno == errno.SIGPIPE:
+#                        print("FIFO was closed.")
+#                        break
+                
     ser.close()
     out.close()
 
