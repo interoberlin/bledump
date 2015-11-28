@@ -44,7 +44,7 @@ class PcapFormatter(Formatter):
             0,            # GMT to local correction
             0,            # accuracy of timestamps
             65535,        # max length of captured packets, in octets
-            195,          # data link type (DLT) - IEEE 802.15.4
+            251,          # data link type (DLT)
         ))
         self.out.flush()
 
@@ -215,6 +215,8 @@ def do_sniff_once(options):
                     del parts[5] # "OK"
                 if len(parts) > 2:
                     del parts[2] # "MISS"
+                #del parts[1] # AA
+                #del parts[0] # Header
                 whole = "".join(parts).replace("  "," ")
                 print(whole)
 
